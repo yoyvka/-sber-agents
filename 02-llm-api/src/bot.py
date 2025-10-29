@@ -34,18 +34,32 @@ class ChatBot:
         load_dotenv()
         
         # Получаем конфигурацию
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        self.model_name = os.getenv("MODEL_NAME", "openai/gpt-3.5-turbo")
+        api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip()
+        self.model_name = os.getenv("MODEL_NAME", "openai/gpt-3.5-turbo").strip()
+        referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
+        title = os.getenv("OPENROUTER_X_TITLE", "").strip()
         
         if not api_key:
             console.print("[red]❌ Ошибка: OPENROUTER_API_KEY не найден в .env файле![/red]")
             sys.exit(1)
+        if not api_key.startswith("sk-or-v1-"):
+            console.print("[yellow]⚠️ Похоже, ключ не из OpenRouter (ожидается префикс sk-or-v1-). Проверьте значение OPENROUTER_API_KEY в .env[/yellow]")
+        if not base_url.startswith("https://openrouter.ai/api/"):
+            console.print("[yellow]⚠️ Нестандартный OPENROUTER_BASE_URL. Обычно: https://openrouter.ai/api/v1[/yellow]")
         
         # Инициализируем OpenAI клиент для работы с OpenRouter
+        default_headers = {}
+        # Рекомендуемые заголовки для OpenRouter (не обязательны, но полезны)
+        if referer:
+            default_headers["HTTP-Referer"] = referer
+        if title:
+            default_headers["X-Title"] = title
+
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
+            default_headers=default_headers if default_headers else None,
         )
         
         # История диалога (список сообщений)

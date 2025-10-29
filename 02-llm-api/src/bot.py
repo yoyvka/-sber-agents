@@ -22,7 +22,11 @@ console = Console()
 # Системный промпт - определяет роль и поведение ассистента
 # ЗАДАНИЕ: Вставьте сюда ваш системный промпт, который определит поведение бота
 # Например: "Ты — профессиональный банковский консультант..."
-SYSTEM_PROMPT = "Ты юморист. Ты веселый и смешной. Ты любишь шутить и делать юмор."
+SYSTEM_PROMPT = """Ты — опытный преподаватель программирования на Python.
+Объясняй концепции простым языком с примерами.
+Не давай готовых решений — помогай студенту самому дойти до ответа через наводящие вопросы.
+Поощряй любопытство и эксперименты с кодом.
+Будь терпелив к ошибкам новичков."""
 
 
 class ChatBot:
@@ -34,32 +38,18 @@ class ChatBot:
         load_dotenv()
         
         # Получаем конфигурацию
-        api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-        base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip()
-        self.model_name = os.getenv("MODEL_NAME", "openai/gpt-3.5-turbo").strip()
-        referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
-        title = os.getenv("OPENROUTER_X_TITLE", "").strip()
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        self.model_name = os.getenv("MODEL_NAME", "openai/gpt-3.5-turbo")
         
         if not api_key:
             console.print("[red]❌ Ошибка: OPENROUTER_API_KEY не найден в .env файле![/red]")
             sys.exit(1)
-        if not api_key.startswith("sk-or-v1-"):
-            console.print("[yellow]⚠️ Похоже, ключ не из OpenRouter (ожидается префикс sk-or-v1-). Проверьте значение OPENROUTER_API_KEY в .env[/yellow]")
-        if not base_url.startswith("https://openrouter.ai/api/"):
-            console.print("[yellow]⚠️ Нестандартный OPENROUTER_BASE_URL. Обычно: https://openrouter.ai/api/v1[/yellow]")
         
         # Инициализируем OpenAI клиент для работы с OpenRouter
-        default_headers = {}
-        # Рекомендуемые заголовки для OpenRouter (не обязательны, но полезны)
-        if referer:
-            default_headers["HTTP-Referer"] = referer
-        if title:
-            default_headers["X-Title"] = title
-
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
-            default_headers=default_headers if default_headers else None,
         )
         
         # История диалога (список сообщений)
@@ -86,6 +76,12 @@ class ChatBot:
             "role": role,
             "content": content
         })
+        
+        # Ограничиваем историю диалога
+        MAX_MESSAGES = 10
+        if len(self.conversation_history) > MAX_MESSAGES + 1:  # +1 для системного промпта
+            # Суммаризируем историю вместо простого обрезания
+            self.summarize_history()
     
     def clear_history(self):
         """Очистить историю диалога."""
@@ -97,6 +93,58 @@ class ChatBot:
                 "content": SYSTEM_PROMPT
             })
         console.print("[yellow]📝 История диалога очищена[/yellow]\n")
+
+    def summarize_history(self):
+        """Суммаризовать длинную историю диалога."""
+        if len(self.conversation_history) <= 3:  # Не суммаризируем короткую историю
+            return
+        
+        # Находим системный промпт
+        system_prompt = next((msg for msg in self.conversation_history if msg["role"] == "system"), None)
+        
+        # Оставляем последние 2 сообщения для контекста
+        recent_messages = self.conversation_history[-2:]
+        
+        # Берем сообщения для суммаризации (исключая системный промпт и последние сообщения)
+        messages_to_summarize = [
+            msg for msg in self.conversation_history 
+            if msg["role"] != "system" and msg not in recent_messages
+        ]
+        
+        if not messages_to_summarize:
+            return
+            
+        # Создаем контекст для суммаризации
+        summary_prompt = {
+            "role": "user",
+            "content": "Пожалуйста, создай краткое резюме следующего диалога, сохраняя ключевые моменты и важную информацию:\n\n" + 
+                      "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages_to_summarize])
+        }
+        
+        try:
+            # Отправляем запрос на суммаризацию
+            with console.status("[bold yellow]🤔 Суммаризирую историю диалога...", spinner="dots"):
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": "Ты - эксперт по созданию кратких и информативных резюме диалогов. Создавай четкие и структурированные саммари."},
+                        summary_prompt
+                    ],
+                )
+            
+            summary = response.choices[0].message.content
+            
+            # Формируем новую историю
+            self.conversation_history = (
+                ([system_prompt] if system_prompt else []) +  # Системный промпт
+                [{"role": "assistant", "content": f"📝 Резюме предыдущего диалога:\n{summary}"}] +  # Резюме
+                recent_messages  # Последние сообщения
+            )
+            
+            console.print("[green]✓ История диалога успешно суммаризирована[/green]\n")
+            
+        except Exception as e:
+            console.print(f"[red]❌ Ошибка при суммаризации истории: {e}[/red]\n")
     
     def display_metrics(self, usage: Optional[dict], finish_reason: Optional[str] = None):
         """Отобразить метрики и метаданные ответа."""

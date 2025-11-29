@@ -1,0 +1,7 @@
+run:
+	python -m src.bot.main
+
+
+
+
+

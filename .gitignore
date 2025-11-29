@@ -20,3 +20,41 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+### Python ###
+# Environment variables
+.env
+*.env
+.env.local
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+bot_run.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sensitive files
+*key*.txt
+*secret*.txt
+*password*.txt
